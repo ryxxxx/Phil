@@ -25,7 +25,8 @@ const keyboard = {
   "left":   37,
   "up":     38,
   "right":  39,
-  "down":   40
+  "down":   40,
+  "comma": 188
 };
 const BLACK = ".";
 const DASH = "-";
@@ -39,7 +40,7 @@ const DEFAULT_CLUE = "(blank clue)";
 const DEFAULT_NOTIFICATION_LIFETIME = 10; // in seconds
 
 let history = [];
-let isSymmetrical = true;
+let isSymmetrical = false;
 let grid = undefined;
 let squares = undefined;
 let isMutated = false;
@@ -61,11 +62,17 @@ class Crossword {
     this.rows = rows;
     this.cols = cols;
     this.fill = [];
+    this.bar_h = [];
+    this.bar_v = [];
     //
     for (let i = 0; i < this.rows; i++) {
       this.fill.push("");
+      this.bar_h.push("");
+      this.bar_v.push("");
       for (let j = 0; j < this.cols; j++) {
         this.fill[i] += BLANK;
+        this.bar_h[i] += BLANK;
+        this.bar_v[i] += BLANK;
       }
     }
   }
@@ -193,10 +200,7 @@ class Toolbar {
       "exportPDF": new Button("print-puzzle"),
       "exportNYT": new Button("print-NYT-submission"),
       "export": new Button("export"),
-      "quickLayout": new Button("quick-layout"),
-      "freezeLayout": new Button("toggle-freeze-layout"),
       "clearFill": new Button("clear-fill"),
-      "toggleSymmetry": new Button("toggle-symmetry"),
       "openWordlist": new Button("open-wordlist"),
       "autoFill": new Button("auto-fill")
     }
@@ -239,7 +243,7 @@ class Interface {
     this.sidebar;
     this.toolbar = new Toolbar("toolbar");
 
-    this.isSymmetrical = true;
+    this.isSymmetrical = false;
     this.row = 0;
     this.col = 0;
     this.acrossWord = '';
@@ -287,15 +291,19 @@ function createNewPuzzle(rows, cols) {
   xw["fill"] = [];
   for (let i = 0; i < xw.rows; i++) {
     xw.fill.push("");
+    xw.bar_h.push("");
+    xw.bar_v.push("");
     for (let j = 0; j < xw.cols; j++) {
       xw.fill[i] += BLANK;
+      xw.bar_h[i] += BLANK;
+      xw.bar_v[i] += BLANK;
     }
   }
   updateInfoUI();
   document.getElementById("main").innerHTML = "";
   createGrid(xw.rows, xw.cols);
 
-  isSymmetrical = true;
+  isSymmetrical = false;
   current = {
     "row":        0,
     "col":        0,
@@ -344,6 +352,22 @@ function keyboardHandler(e) {
   let activeCell = grid.querySelector('[data-row="' + current.row + '"]').querySelector('[data-col="' + current.col + '"]');
   const symRow = xw.rows - 1 - current.row;
   const symCol = xw.cols - 1 - current.col;
+
+  if(e.which == keyboard.comma)
+  {
+    let currentCell = grid.querySelector('[data-row="' + current.row + '"]').querySelector('[data-col="' + current.col + '"]');
+    if(current.direction == ACROSS)
+    {
+      xw.bar_h[current.row] = xw.bar_h[current.row].slice(0, current.col) + (xw.bar_h[current.row][current.col] == BLACK ? BLANK : BLACK) + xw.bar_h[current.row].slice(current.col + 1);
+      currentCell.classList.toggle("bar_h");
+    }
+    if(current.direction == DOWN)
+    {
+      xw.bar_v[current.row] = xw.bar_v[current.row].slice(0, current.col) + (xw.bar_v[current.row][current.col] == BLACK ? BLANK : BLACK) + xw.bar_v[current.row].slice(current.col + 1);
+      currentCell.classList.toggle("bar_v");
+    }
+    isMutated = true;
+  }
 
   if ((e.which >= keyboard.a && e.which <= keyboard.z) || e.which == keyboard.space) {
     let oldContent = xw.fill[current.row][current.col];
@@ -512,6 +536,10 @@ function createGrid(rows, cols) {
 		for (let j = 0; j < cols; j++) {
 		    let col = document.createElement("TD");
         col.setAttribute("data-col", j);
+        if(xw.bar_h[i][j] == BLACK)
+          col.classList.toggle("bar_h");
+        if(xw.bar_v[i][j] == BLACK)
+          col.classList.toggle("bar_v");
 
         let label = document.createElement("DIV");
         label.setAttribute("class", "label");
@@ -539,8 +567,17 @@ function updateLabelsAndClues() {
       let isAcross = false;
       let isDown = false;
       if (xw.fill[i][j] != BLACK) {
-        isDown = i == 0 || xw.fill[i - 1][j] == BLACK;
-        isAcross = j == 0 || xw.fill[i][j - 1] == BLACK;
+        isDown = i == 0 || xw.fill[i - 1][j] == BLACK || xw.bar_v[i - 1][j] == BLACK;
+        isAcross = j == 0 || xw.fill[i][j - 1] == BLACK || xw.bar_h[i][j - 1] == BLACK;
+        
+        let leftCellBlack = (j == 0) ? true : (xw.fill[i][j - 1] == BLACK || xw.bar_h[i][j - 1] == BLACK);
+        let topCellBlack = (i == 0) ? true : (xw.fill[i - 1][j] == BLACK || xw.bar_v[i - 1][j] == BLACK);
+        let rightCellBlack = (j == xw.cols - 1) ? true : (xw.fill[i][j + 1] == BLACK || xw.bar_h[i][j] == BLACK);
+        let bottomCellBlack = (i == xw.rows - 1) ? true : (xw.fill[i + 1][j] == BLACK || xw.bar_v[i][j] == BLACK);
+        if (leftCellBlack && rightCellBlack)
+          isAcross = false;
+        if (topCellBlack && bottomCellBlack)
+          isDown = false;
       }
       const grid = document.getElementById("grid");
       let currentCell = grid.querySelector('[data-row="' + i + '"]').querySelector('[data-col="' + j + '"]');
@@ -585,16 +622,44 @@ function updateActiveWords() {
 
 function getWordAt(row, col, direction, setCurrentWordIndices) {
   let text = "";
-  let [start, end] = [0, 0];
+  let [start, end] = [row, col];
+
   if (direction == ACROSS) {
-    text = xw.fill[row];
+    for (let i = col; i >= 0; i--) {
+      start = i;
+      if (i == 0)
+        break;
+      if( xw.bar_h[row][i-1] == BLACK || xw.fill[row][i-1] == BLACK )
+        break;
+    }
   } else {
-    for (let i = 0; i < xw.rows; i++) {
-      text += xw.fill[i][col];
+    for (let i = row; i >= 0; i--) {
+      start = i;
+      if (i == 0)
+        break;
+      if( xw.bar_v[i-1][col] == BLACK || xw.fill[i-1][col] == BLACK )
+        break;
     }
   }
+
+  if (direction == ACROSS) {
+    for (let i = start; i < xw.cols; i++) {
+      text += xw.fill[row][i];
+      end = i + 1;
+      if( i == xw.cols - 1 || xw.bar_h[row][i] == BLACK || xw.fill[row][i + 1] == BLACK )
+        break;
+    }
+  } else {
+    for (let i = start; i < xw.rows; i++) {
+      text += xw.fill[i][col];
+      end = i + 1;
+      if( i == xw.rows - 1 || xw.bar_v[i][col] == BLACK || xw.fill[i + 1][col] == BLACK )
+        break;
+    }
+  }
+
   text = text.split(BLANK).join(DASH);
-  [start, end] = getWordIndices(text, (direction == ACROSS) ? col : row);
+
   // Set global word indices if needed
   if (setCurrentWordIndices) {
     if (direction == ACROSS) {
@@ -603,15 +668,7 @@ function getWordAt(row, col, direction, setCurrentWordIndices) {
       [current.downStartIndex, current.downEndIndex] = [start, end];
     }
   }
-  return text.slice(start, end);
-}
-
-function getWordIndices(text, position) {
-  let start = text.slice(0, position).lastIndexOf(BLACK);
-  start = (start == -1) ? 0 : start + 1;
-  let end = text.slice(position, DEFAULT_SIZE).indexOf(BLACK);
-  end = (end == -1) ? DEFAULT_SIZE : Number(position) + end;
-  return [start, end];
+  return text;
 }
 
 function updateGridHighlights() {
@@ -699,16 +756,6 @@ function generatePattern() {
   isMutated = true;
   updateUI();
   console.log("Generated layout.")
-}
-
-function toggleSymmetry() {
-  isSymmetrical = !isSymmetrical;
-  // Update UI button
-  let symButton = document.getElementById("toggle-symmetry");
-  symButton.classList.toggle("button-on");
-  buttonState = symButton.getAttribute("data-state");
-  symButton.setAttribute("data-state", (buttonState == "on") ? "off" : "on");
-  symButton.setAttribute("data-tooltip", "Turn " + buttonState + " symmetry");
 }
 
 // function toggleHelp() {

@@ -445,9 +445,12 @@ function generatePDFClues() {
     };
 
   for (const key in xw.clues) {
-    let [i, j, direction] = key.split(",");
+    let [i_as_s, j_as_s, direction] = key.split(",");
+    let i = Number(i_as_s);
+    let j = Number(j_as_s);
     const cell = grid.querySelector('[data-row="' + i + '"]').querySelector('[data-col="' + j + '"]');
     let label = Number(cell.firstChild.innerHTML);
+    console.log("generatePDFClues:", i, j, direction, "->", label, xw.clues[key]);
     if (direction == ACROSS) {
       // acrossClues.push([label, xw.clues[key], getWordAt(i, j, direction)]);
       // acrossClues.sort(byLabel);
@@ -484,6 +487,22 @@ function layoutPDFGrid(doc, x, y, isFilled) {
       doc.setFillColor(xw.fill[i][j] == BLACK ? 0 : 255);
       doc.rect(format.gridOrigin.x + (j * format.squareSize),
                format.gridOrigin.y + (i * format.squareSize), format.squareSize, format.squareSize, 'FD');
+      if (xw.bar_h[i][j] == BLACK) { // Draw horizontal bar
+        doc.setLineWidth(format.outerLineWidth + format.innerLineWidth);
+        doc.line(format.gridOrigin.x + ((j + 1) * format.squareSize),
+                 format.gridOrigin.y + ((i + 1) * format.squareSize),
+                 format.gridOrigin.x + ((j + 1) * format.squareSize),
+                 format.gridOrigin.y + (i * format.squareSize));
+        doc.setLineWidth(format.innerLineWidth);
+      }
+      if (xw.bar_v[i][j] == BLACK) { // Draw vertical bar
+        doc.setLineWidth(format.outerLineWidth + format.innerLineWidth);
+        doc.line(format.gridOrigin.x + (j * format.squareSize),
+                 format.gridOrigin.y + ((i + 1) * format.squareSize),
+                 format.gridOrigin.x + ((j + 1) * format.squareSize),
+                 format.gridOrigin.y + ((i + 1) * format.squareSize));
+        doc.setLineWidth(format.innerLineWidth);
+      }
     }
   }
   // Label grid

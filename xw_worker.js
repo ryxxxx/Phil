@@ -24,7 +24,7 @@ onmessage = function(e) {
                 Module.callMain(args);
                 break;
             case 'cancel':
-                Module.ccall('cancel', 'void', [], []);
+                Module.call('cancel', 'void', [], []);
                 break;
         }
     });
